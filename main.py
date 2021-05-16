@@ -8,6 +8,10 @@ import re
 
 import unittest
 
+# Convert an absolute time to datetime of today
+def dt_abs(time):
+    return datetime.combine(date.today(), time)
+
 def get_schedules_json(type, code, station, way):
     url = f'https://api-ratp.pierre-grimaud.fr/v4/schedules/{type}/{code}/{station}/{way}'
     f = urllib.request.urlopen(url)
@@ -42,7 +46,7 @@ def parse_rer_schedule_msg(msg):
     if msg.startswith("A l'approche"):
         return datetime.now() + timedelta(minutes=1)
     if res := re.match(r'(\d+):(\d+)', msg):
-        return date.today() + timedelta(hours=int(res.group(1)), minutes=int(res.group(2)))
+        return dt_abs(time(int(res.group(1)),int(res.group(2))))
     return None
 
 def bus_schedule_absolute_time(resp):
@@ -98,5 +102,5 @@ class TestRATP(unittest.TestCase):
           }
         }
         now = datetime.now()
-        expected = [now, now + timedelta(minutes=1), date.today() + timedelta(hours=17,minutes=47)]
+        expected = [now, now + timedelta(minutes=1), dt_abs(time(17,47))]
         self.assertAlmostEqualTime(rer_schedule_absolute_time(resp), expected)
