@@ -12,31 +12,49 @@ import unittest
 def dt_abs(time):
     return datetime.combine(date.today(), time)
 
-def get_schedules_json(type, code, station, way):
-    url = f'https://api-ratp.pierre-grimaud.fr/v4/schedules/{type}/{code}/{station}/{way}'
+def call_api(*args):
+    url = f'https://api-ratp.pierre-grimaud.fr/v4/' + '/'.join(args)
+    print(url)
     f = urllib.request.urlopen(url)
     raw_response = f.read().decode('utf-8')
     return json.loads(raw_response)
 
 def get_bus_schedules_json():
-    return get_schedules_json('buses', '172', 'villejuif%2B%2B%2Blouis%2Baragon', 'R')
+    return call_api('schedules', 'buses', '172', 'villejuif%2B%2B%2Blouis%2Baragon', 'R')
 #print(get_bus_schedules_json())
 
 def get_rer_schedules_json():
-    return get_schedules_json('rers', 'b', 'bourg%2Bla%2Breine', 'R')
+    return call_api('schedules', 'rers', 'b', 'bourg%2Bla%2Breine', 'R')
 #print(get_rer_schedules_json())
 
-mission_code_to_MV = ['KASE', 'KEXZ']
+def get_rer_missions_json(code):
+    return call_api('missions', 'rers', 'B', code)
+#print(get_rer_missions_json('SECO'))
+
 # Returns wether the RER with mission code "m" go to Massy-Verrières
 # Ex: * KASE -> True
 #     * PISE -> False
 def go_to_MV(m):
-    if m in mission_code_to_MV:
-        return True
-    return False
+    with open('missions_code.txt', 'r') as missions_file:
+        missions = json.load(missions_file)
+    if m not in missions:
+        try:
+            resp = get_rer_missions_json(m)
+            missions[m] = [ s['name'] for s in resp['result']['stations'] ]
+        except urllib.error.HTTPError as e:
+            # "Sans voyageurs" mission return status 400
+            if e.code == 400:
+                missions[m] = []
+            else:
+                print(f'Error: {e}')
+                return False
+        print(f'Updating file with code {m}')
+        with open('missions_code.txt', 'w') as missions_file:
+            json.dump(missions, missions_file)
+    return "Massy Verrieres" in missions[m]
 
 def filter_MV(resp):
-    resp['result']['schedules'] = filter(lambda s: go_to_MV(s['code']), resp['result']['schedules'])
+    resp['result']['schedules'] = list(filter(lambda s: go_to_MV(s['code']), resp['result']['schedules']))
     return resp
 
 # Convert RATP human string to timedelta object
