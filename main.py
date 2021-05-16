@@ -61,6 +61,39 @@ def rer_schedule_absolute_time(resp):
     schedules = [ d  for s in schedules_json if (d := parse_rer_schedule_msg(s['message'])) is not None]
     return schedules
 
+def find_next_schedule(schedules, time):
+    for s in schedules:
+        if s > time:
+            return s
+
+def compute_itinerary():
+    buses_schedules = bus_schedule_absolute_time(get_bus_schedules_json())
+    rer_schedules = rer_schedule_absolute_time(get_rer_schedules_json())
+
+    itineraries = []
+    for bs in buses_schedules:
+        it = [('VJ departure', bs)]
+
+        # TODO: Use real-time schedule from previous station
+        estimated_bus_travel_duration = timedelta(minutes=20)
+        blr_arrival_time = bs + estimated_bus_travel_duration
+        it.append(('BlR bus arrival', blr_arrival_time))
+
+        blr_departure_time = find_next_schedule(rer_schedules, blr_arrival_time)
+        it.append(('BlR RER departure', blr_departure_time))
+
+        itineraries.append(it)
+    return itineraries
+
+def pretty_print(itineraries):
+    for it in itineraries:
+        for (label, dt) in it:
+            print(f'{label} {dt.strftime("%H:%M")}')
+        print()
+
+if __name__ == '__main__':
+    pretty_print(compute_itinerary())
+
 class TestRATP(unittest.TestCase):
     def assertAlmostEqualTime(self, first, second, delta=timedelta(seconds=1)):
         self.assertEqual(len(first), len(second))
