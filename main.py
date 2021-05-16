@@ -80,6 +80,8 @@ def compute_itinerary():
         it.append(('BlR bus arrival', blr_arrival_time))
 
         blr_departure_time = find_next_schedule(rer_schedules, blr_arrival_time)
+        if blr_departure_time is None:
+            continue
         it.append(('BlR RER departure', blr_departure_time))
 
         itineraries.append(it)
