@@ -26,6 +26,19 @@ def get_rer_schedules_json():
     return get_schedules_json('rers', 'b', 'bourg%2Bla%2Breine', 'R')
 #print(get_rer_schedules_json())
 
+mission_code_to_MV = ['KASE', 'KEXZ']
+# Returns wether the RER with mission code "m" go to Massy-Verrières
+# Ex: * KASE -> True
+#     * PISE -> False
+def go_to_MV(m):
+    if m in mission_code_to_MV:
+        return True
+    return False
+
+def filter_MV(resp):
+    resp['result']['schedules'] = filter(lambda s: go_to_MV(s['code']), resp['result']['schedules'])
+    return resp
+
 # Convert RATP human string to timedelta object
 # Ex:
 # * convert "3 mn" to timedelta(minutes=3)
@@ -68,7 +81,7 @@ def find_next_schedule(schedules, time):
 
 def compute_itinerary():
     buses_schedules = bus_schedule_absolute_time(get_bus_schedules_json())
-    rer_schedules = rer_schedule_absolute_time(get_rer_schedules_json())
+    rer_schedules = rer_schedule_absolute_time(filter_MV(get_rer_schedules_json()))
 
     itineraries = []
     for bs in buses_schedules:
