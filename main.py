@@ -119,6 +119,8 @@ def compute_itinerary():
     return itineraries
 
 def pretty_print(itineraries):
+    if not itineraries:
+        print('No iteneraries found')
     for it in itineraries:
         for (label, dt) in it:
             print(f'{label} {dt.strftime("%H:%M")}')
