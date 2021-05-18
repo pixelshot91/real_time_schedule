@@ -60,10 +60,13 @@ def filter_MV(resp):
 # Convert RATP human string to timedelta object
 # Ex:
 # * convert "3 mn" to timedelta(minutes=3)
+# * convert "A l'approche" to timedelta(minutes=3)
 # * convert "A l'arret" to timedelta(0)
 def parse_bus_schedule_msg(msg):
     if msg == "A l'arret":
         return timedelta()
+    if msg == "A l'approche":
+        return timedelta(minutes=1)
     if res := re.fullmatch(r'(\d+) mn', msg):
         return timedelta(minutes=int(res.group(1)))
     return None
