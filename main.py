@@ -7,6 +7,8 @@ from datetime import datetime, date, time, timedelta
 import re
 from colorama import Fore, Back, Style
 from sty import fg, bg, ef, rs
+from collections import namedtuple
+import yaml
 
 import unittest
 
@@ -17,28 +19,35 @@ import unittest
 
 def wrap_style(style, text):
     return style + text + bg.rs + ef.rs
-SYMBOLS = {
-        'B172': wrap_style(bg(0, 100, 60), '172'),
-        'RB':  wrap_style(bg(60, 145, 220), 'RER B'),
+
+# TODO: add direction to transport
+class Transport(namedtuple('Transport', ['kind', 'line'])):
+    SYMBOLS = {
+        ('buses', '172'): wrap_style(bg(0, 100, 60), '172'),
+        ('rers', 'B'):  wrap_style(bg(60, 145, 220), 'RER B'),
         }
+    def __str__(self):
+        return self.SYMBOLS[self]
 
 class LocTime:
     def __init__(self, location, time):
         self.location = location
         self.time = time
     def __str__(self):
+        if self.time is None:
+            return 'XX:XX' + ' ' + self.location
         return self.time.strftime("%H:%M") + ' ' + self.location
+    def __repr__(self):
+        return repr(self.time)
 
-class Leg:
-    def __init__(self, title, departure, arrival):
-        self.title = title
-        self.departure = departure
-        self.arrival = arrival
+class Leg(namedtuple('Leg', ['transport', 'xfrom', 'to', 'direction', 'duration'])):
     def __str__(self):
-        return f'''{self.title}
-* {self.departure}
+        return f'''{self.transport}
+* {self.xfrom}
 |
-* {self.arrival}'''
+* {self.to}'''
+    def __repr__(self):
+        return f'Leg({self.transport!r}, from={self.xfrom!r}, to={self.to!r})'
 
 # Convert an absolute time to datetime of today
 def dt_abs(time):
@@ -51,13 +60,30 @@ def call_api(*args):
     raw_response = f.read().decode('utf-8')
     return json.loads(raw_response)
 
-def get_bus_schedules_json():
-    return call_api('schedules', 'buses', '172', 'villejuif%2B%2B%2Blouis%2Baragon', 'R')
-#print(get_bus_schedules_json())
+def stations_slug_get(transport, slug):
+    # TODO implement
+    return slug
 
-def get_rer_schedules_json():
-    return call_api('schedules', 'rers', 'b', 'bourg%2Bla%2Breine', 'R')
-#print(get_rer_schedules_json())
+def make_leg(req, time):
+    new_from = LocTime(req.xfrom.location, time)
+    new_to = LocTime(req.to.location, time + timedelta(minutes=req.duration))
+    return Leg(req.transport, new_from, new_to, req.direction, req.duration)
+
+# TODO: the direction should be derived from the destination station
+# TODO: cache results
+def get_schedules(req):
+    r = call_api(
+        'schedules',
+        req.transport.kind,
+        req.transport.line,
+        stations_slug_get(req.transport, req.xfrom.location),
+        req.direction)
+    to_times = {
+            'buses': bus_schedule_absolute_time,
+            'rers': rer_schedule_absolute_time,
+    }
+    times = to_times[req.transport.kind](r)
+    return [ make_leg(req, t) for t in times ]
 
 def get_rer_missions_json(code):
     return call_api('missions', 'rers', 'B', code)
@@ -127,30 +153,26 @@ def rer_schedule_absolute_time(resp):
     schedules = [ d  for s in schedules_json if (d := parse_rer_schedule_msg(s['message'])) is not None]
     return schedules
 
-def find_next_schedule(schedules, time):
-    for s in schedules:
-        if s > time:
-            return s
+def find_next_schedule(suggested_legs, time):
+    for l in suggested_legs:
+        if l.xfrom.time > time:
+            return l
 
-def compute_itinerary():
-    buses_schedules = bus_schedule_absolute_time(get_bus_schedules_json())
-    rer_schedules = rer_schedule_absolute_time(filter_MV(get_rer_schedules_json()))
-
+def compute_itinerary(legs):
+    first_leg = legs[0]
+    possible_first_legs = get_schedules(first_leg)
     itineraries = []
-    for bs in buses_schedules:
-
-        # TODO: Use real-time schedule from previous station
-        estimated_bus_travel_duration = timedelta(minutes=20)
-        blr_arrival_time = bs + estimated_bus_travel_duration
-        it = [Leg(SYMBOLS['B172'], LocTime('VJ', bs), LocTime('BlR', blr_arrival_time))]
-
-        blr_departure_time = find_next_schedule(rer_schedules, blr_arrival_time)
-        if blr_departure_time is None:
-            continue
-        mv_arrival_time = blr_departure_time + timedelta(minutes=10)
-        it.append(Leg(SYMBOLS['RB'], LocTime('BlR', blr_departure_time), LocTime('MV', mv_arrival_time)))
-
-        itineraries.append(it)
+    for pl in possible_first_legs:
+        t = pl.to.time
+        it = [pl]
+        for requested_leg in legs[1:]:
+            suggested_leg = find_next_schedule(get_schedules(requested_leg), t)
+            if suggested_leg is None:
+                break
+            it.append(suggested_leg)
+            t = suggested_leg.to.time
+        else:
+            itineraries.append(it)
     return itineraries
 
 def pretty_print(itineraries):
@@ -162,7 +184,16 @@ def pretty_print(itineraries):
         print()
 
 if __name__ == '__main__':
-    pretty_print(compute_itinerary())
+    with open('trip.yaml', 'r') as trip_file:
+        trip = yaml.load(trip_file, Loader=yaml.Loader)
+        legs = [Leg(
+            Transport(l['kind'], l['line']),
+            LocTime(l['station_from'], None),
+            LocTime(l['station_to'], None),
+            l['direction'],
+            l['duration'],
+        ) for l in trip]
+    pretty_print(compute_itinerary(legs))
 
 class TestRATP(unittest.TestCase):
     def assertAlmostEqualTime(self, first, second, delta=timedelta(seconds=1)):
