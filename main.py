@@ -5,8 +5,40 @@ import urllib.parse
 import json
 from datetime import datetime, date, time, timedelta
 import re
+from colorama import Fore, Back, Style
+from sty import fg, bg, ef, rs
 
 import unittest
+
+# Color
+# Should use https://data.ratp.fr/explore/dataset/pictogrammes-des-lignes-de-metro-rer-tramway-bus-et-noctilien/information/
+# but it only provide svg pictogram, not the background color
+# https://fr.wikipedia.org/w/index.php?title=Mod%C3%A8le:Bus_RATP/couleur_fond&action=edit
+
+def wrap_style(style, text):
+    return style + text + bg.rs + ef.rs
+SYMBOLS = {
+        'B172': wrap_style(bg(0, 100, 60), '172'),
+        'RB':  wrap_style(bg(60, 145, 220), 'RER B'),
+        }
+
+class LocTime:
+    def __init__(self, location, time):
+        self.location = location
+        self.time = time
+    def __str__(self):
+        return self.time.strftime("%H:%M") + ' ' + self.location
+
+class Leg:
+    def __init__(self, title, departure, arrival):
+        self.title = title
+        self.departure = departure
+        self.arrival = arrival
+    def __str__(self):
+        return f'''{self.title}
+* {self.departure}
+|
+* {self.arrival}'''
 
 # Convert an absolute time to datetime of today
 def dt_abs(time):
@@ -106,17 +138,17 @@ def compute_itinerary():
 
     itineraries = []
     for bs in buses_schedules:
-        it = [('VJ departure', bs)]
 
         # TODO: Use real-time schedule from previous station
         estimated_bus_travel_duration = timedelta(minutes=20)
         blr_arrival_time = bs + estimated_bus_travel_duration
-        it.append(('BlR bus arrival', blr_arrival_time))
+        it = [Leg(SYMBOLS['B172'], LocTime('VJ', bs), LocTime('BlR', blr_arrival_time))]
 
         blr_departure_time = find_next_schedule(rer_schedules, blr_arrival_time)
         if blr_departure_time is None:
             continue
-        it.append(('BlR RER departure', blr_departure_time))
+        mv_arrival_time = blr_departure_time + timedelta(minutes=10)
+        it.append(Leg(SYMBOLS['RB'], LocTime('BlR', blr_departure_time), LocTime('MV', mv_arrival_time)))
 
         itineraries.append(it)
     return itineraries
@@ -125,8 +157,8 @@ def pretty_print(itineraries):
     if not itineraries:
         print('No iteneraries found')
     for it in itineraries:
-        for (label, dt) in it:
-            print(f'{label} {dt.strftime("%H:%M")}')
+        for leg in it:
+            print(leg)
         print()
 
 if __name__ == '__main__':
