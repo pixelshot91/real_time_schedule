@@ -14,8 +14,8 @@ So the chance of your trip being disturbed is greatly reduced (however not cance
 ## Source of Information
 The official RATP API is available here.
 https://data.ratp.fr/explore/dataset/horaires-temps-reel/information/
-It provide real-time schedule for all RATP buses, RER A and the RATP part of the
-RER B.
+It provide real-time schedule for all RATP buses and the RATP part of the
+RER A and B.
 The API is free and the request cap is 30 000 000 request per month.
 However, one has to fill a form to register his IP address to use it.
 So this app does not use this API directly, but a proxy:
@@ -45,6 +45,6 @@ One work around would be to consider all "30 mn" value to be false and ignore
 them.
 
 ## TODO
-To access SNCF information (north of RER B, RER C, D and E), we shoud use this
+To access SNCF information (part of RER A and B, RER C, D and E), we shoud use this
 API:
 https://ressources.data.sncf.com/explore/dataset/api-temps-reel-transilien/information/
