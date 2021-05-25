@@ -40,14 +40,18 @@ class LocTime:
     def __repr__(self):
         return repr(self.time)
 
-class Leg(namedtuple('Leg', ['transport', 'xfrom', 'to', 'direction', 'duration'])):
+class Leg(namedtuple('Leg', ['transport', 'xfrom', 'to', 'direction', 'duration', 'mission'])):
     def __str__(self):
-        return f'''{self.transport}
+        mission = self.mission or ""
+        return f'''{self.transport} {mission}
 * {self.xfrom}
 |
 * {self.to}'''
     def __repr__(self):
         return f'Leg({self.transport!r}, from={self.xfrom!r}, to={self.to!r})'
+
+class Schedule(namedtuple('Schedule', ['timestamp', 'mission'])):
+    pass
 
 # Convert an absolute time to datetime of today
 def dt_abs(time):
@@ -64,10 +68,10 @@ def stations_slug_get(transport, slug):
     # TODO implement
     return slug
 
-def make_leg(req, time):
+def make_leg(req, time, mission):
     new_from = LocTime(req.xfrom.location, time)
     new_to = LocTime(req.to.location, time + timedelta(minutes=req.duration))
-    return Leg(req.transport, new_from, new_to, req.direction, req.duration)
+    return Leg(req.transport, new_from, new_to, req.direction, req.duration, mission)
 
 # TODO: the direction should be derived from the destination station
 # TODO: cache results
@@ -78,12 +82,12 @@ def get_schedules(req):
         req.transport.line,
         stations_slug_get(req.transport, req.xfrom.location),
         req.direction)
-    to_times = {
+    to_schedules = {
             'buses': bus_schedule_absolute_time,
             'rers': rer_schedule_absolute_time,
     }
-    times = to_times[req.transport.kind](r)
-    return [ make_leg(req, t) for t in times ]
+    schedules = to_schedules[req.transport.kind](r)
+    return [ make_leg(req, s.timestamp, s.mission) for s in schedules ]
 
 def get_rer_missions_json(code):
     return call_api('missions', 'rers', 'B', code)
@@ -145,12 +149,12 @@ def bus_schedule_absolute_time(resp):
     schedules_json = resp['result']['schedules']
     schedules_duration = [ d  for s in schedules_json if (d := parse_bus_schedule_msg(s['message'])) is not None]
     now = datetime.now()
-    schedules = [ now + delta for delta in schedules_duration ]
+    schedules = [ Schedule(now + delta, None) for delta in schedules_duration ]
     return schedules
 
 def rer_schedule_absolute_time(resp):
     schedules_json = resp['result']['schedules']
-    schedules = [ d  for s in schedules_json if (d := parse_rer_schedule_msg(s['message'])) is not None]
+    schedules = [ Schedule(d, s['code']) for s in schedules_json if (d := parse_rer_schedule_msg(s['message'])) is not None]
     return schedules
 
 def find_next_schedule(suggested_legs, time):
@@ -192,6 +196,7 @@ if __name__ == '__main__':
             LocTime(l['station_to'], None),
             l['direction'],
             l['duration'],
+            None
         ) for l in trip]
     pretty_print(compute_itinerary(legs))
 
