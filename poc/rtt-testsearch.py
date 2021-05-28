@@ -24,7 +24,11 @@ class Trip():
   def __getitem__(self, key):
     return self.legs[key]
   def __str__(self):
-    return '\n'.join(["Trip:"] + [f"- {leg}" for leg in self.legs])
+    return '\n'.join([f"Trip: {self.duration}"] +
+                     [f"- {leg}" for leg in self.legs])
+  @property
+  def duration(self):
+      return self.legs[-1].arrival - self.legs[0].departure
   def __radd__(self, seq):
     return Trip(seq + self.legs)
   def __len__(self):
@@ -69,8 +73,7 @@ class Transport:
 
 ident = 0
 def p(r, s):
-    pass
-    #print(' ' * 3 * (3 - len(r)) + s)
+    print(' ' * 3 * (3 - len(r)) + s)
 
 T_METRO = "METRO "
 T_RER   = "RER   "
@@ -81,31 +84,24 @@ def suggest_trips(request, departure):
   rest = request[1:]
   best = None
   for first in suggest_legs(request[0], departure):
-    p(request, f'{first.departure} {len(rest)}')
     if best is not None and first.arrival >= best + margin:
-      p(request, f"Cut: {len(request)} {first.arrival} first")
-      break
+      break # Early cut to avoid recursing infinitly on noneness
     if not rest:
-      p(request, "IF")
       yield Trip([first])
       continue
-    p(request, f"else {len(rest)}")
     suggested_rests = suggest_trips(rest, departure=first.arrival)
     for suggested_rest in suggested_rests:
-      trip = [first] + suggested_rest
-      arrival = trip[-1].arrival
-      if best is None:
+      arrival = suggested_rest[-1].arrival
+      if best is None or best >= arrival:
         best = arrival
       elif arrival >= best + margin:
-        p(request, f"Cut: {len(request)}  because {arrival} > = {best} + {margin} = {best + margin} ")
-        break  # don't look further
-      yield trip
+        break
+      yield [first] + suggested_rest
 
 def suggest_legs(request, departure):
   # leg constraints -> suggested leg iterator
   for schedule in find_schedules(request.transport, request.loc_from, departure):
     # TODO also estimate duration?
-#    p(request, f"{departure} -> {schedule}")
     yield Leg(request.transport, request.loc_from, request.loc_to,
                schedule, request.duration)
 
@@ -124,11 +120,8 @@ def find_schedules(transport, loc_from, departure):
     if schedule >= departure:
       # TODO also return refined transport (mission code)
       yield schedule
-      if freq <= Time(0,1):
-        print("Time 0.1 STOP")
+      if transport.kind == T_WALK:
         return
-      else:
-        print(f"NORMAL {freq}")
 
 # test
 
@@ -138,14 +131,13 @@ W = Transport(T_WALK, 'X', 'X', 'XXXX')
 
 TRIP = Trip([
   Leg(M7, 'VLA', 'OPE', None, Time(00,25)),
-  Leg(W,  'OPE', 'AUB', None, Time(00, 5)),
+  Leg(W,  'OPE', 'AUB', None, Time(00,11)),
   Leg(RA, 'AUB', 'RMM', None, Time(00,20)),
 ])
 
 margin = Time(0,31)
 
+# TODO: tri et filtrage
 for i, suggested in enumerate(suggest_trips(TRIP, Time(19,30))):
   print(suggested)
   #if i >= 7: break
-
-#
